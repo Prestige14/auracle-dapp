@@ -4,18 +4,17 @@ import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaf
 import './App.css';
 import { AURACLE_CONTRACT_ABI, AURACLE_CONTRACT_ADDRESS } from './contract';
 
-// <<< PERUBAHAN 1: Tambahkan URL WebSocket (WSS) untuk event real-time
 const TARGET_NETWORK = {
     chainId: "0x9b4",
     chainName: "U2U Network Nebulas",
     nativeCurrency: { name: "U2U", symbol: "U2U", decimals: 18 },
     rpcUrls: ["https://rpc-nebulas-testnet.u2u.xyz/"],
-    wsUrls: ["wss://ws-nebulas-testnet.u2u.xyz/"], // Tambahkan URL WSS
+    wsUrls: ["wss://ws-nebulas-testnet.u2u.xyz/"], // Menggunakan URL WSS Anda yang sudah benar
     blockExplorerUrls: ["https://testnet.u2uscan.xyz"],
 };
 
 interface Sensor {
-    id: number;
+    id: number; // Ini adalah tokenId
     owner: string;
     latitude: string;
     longitude: string;
@@ -34,46 +33,60 @@ function App() {
     const [isRegistering, setIsRegistering] = useState<boolean>(false);
     
     const providerRef = useRef<ethers.BrowserProvider | null>(null);
-    // Ref ini sekarang akan diinisialisasi dengan WebSocketProvider
     const readOnlyContractRef = useRef<ethers.Contract | null>(null);
 
-    // useEffect utama untuk inisialisasi provider dan koneksi wallet
+    // <<< FUNGSI FETCH DATA YANG SUDAH DIPERBAIKI >>>
+    const fetchAllSensors = async () => {
+        const contract = readOnlyContractRef.current;
+        if (!contract) return;
+        console.log("Fetching all sensor data using NFT contract logic...");
+        try {
+            const total = await contract.totalSupply();
+            const totalSupply = Number(total);
+
+            const sensorPromises = [];
+            for (let i = 0; i < totalSupply; i++) {
+                // Mengambil data sensor dan pemiliknya secara bersamaan
+                sensorPromises.push(Promise.all([
+                    contract.sensorData(i),
+                    contract.ownerOf(i)
+                ]));
+            }
+
+            const results = await Promise.all(sensorPromises);
+            
+            const formattedSensors = results.map((result, index) => {
+                const [sensorData, owner] = result;
+                return {
+                    id: index,
+                    owner: owner,
+                    latitude: sensorData.latitude,
+                    longitude: sensorData.longitude,
+                    lastPm25Value: Number(sensorData.lastPm25Value),
+                    lastUpdated: Number(sensorData.lastUpdated)
+                };
+            });
+
+            setSensors(formattedSensors);
+            console.log(`✅ Successfully fetched ${formattedSensors.length} sensors.`);
+        } catch (error) {
+            console.error("Failed to fetch all sensor data:", error);
+        }
+    };
+
+    // useEffect untuk inisialisasi & fetch data awal
     useEffect(() => {
-        // <<< PERUBAHAN 2: Gunakan WebSocketProvider untuk koneksi yang persisten
-        // Ini adalah kunci utama untuk mendapatkan event secara instan.
         const wsProvider = new ethers.WebSocketProvider(TARGET_NETWORK.wsUrls[0]);
         readOnlyContractRef.current = new ethers.Contract(AURACLE_CONTRACT_ADDRESS, AURACLE_CONTRACT_ABI, wsProvider);
 
-        // Fungsi untuk mengambil data awal saat load
-        const fetchInitialSensors = async () => {
-            if (!readOnlyContractRef.current) return;
-            console.log("Fetching initial sensor data...");
-            try {
-                const sensorData = await readOnlyContractRef.current.getAllSensors();
-                const formattedSensors = sensorData.map((s: any) => ({
-                    id: Number(s.id),
-                    owner: s.owner,
-                    latitude: s.latitude,
-                    longitude: s.longitude,
-                    lastPm25Value: Number(s.lastPm25Value),
-                    lastUpdated: Number(s.lastUpdated)
-                }));
-                setSensors(formattedSensors);
-                console.log("Sensor data successfully fetched.");
-            } catch (error) {
-                console.error("Gagal mengambil data sensor awal:", error);
-            }
-        };
+        fetchAllSensors(); // Panggil fungsi fetch yang sudah benar
 
-        fetchInitialSensors();
-
-        // Inisialisasi provider wallet (MetaMask)
         if (window.ethereum) {
             providerRef.current = new ethers.BrowserProvider(window.ethereum);
             
             providerRef.current.send("eth_accounts", []).then((accounts) => {
                 if (accounts.length > 0) setAccount(accounts[0]);
-            }).catch(err => console.error("Could not get accounts:", err));
+            });
 
             window.ethereum.on('accountsChanged', (accounts: string[]) => {
                 setAccount(accounts.length > 0 ? accounts[0] : null);
@@ -82,42 +95,35 @@ function App() {
         }
     }, []);
 
-    // <<< PERUBAHAN 3: useEffect terpisah khusus untuk menangani event listener
-    // Ini adalah pola yang lebih bersih dan aman di React.
+    // useEffect terpisah HANYA untuk event 'DataSubmitted'
     useEffect(() => {
         const contract = readOnlyContractRef.current;
         if (!contract) return;
 
-        console.log("Setting up event listener...");
+        console.log("Setting up event listener for DataSubmitted...");
 
         const handleDataSubmitted = (sensorId: bigint, pm25Value: bigint) => {
             const id = Number(sensorId);
             const value = Number(pm25Value);
-            console.log(`✅ Event received! Sensor ID: ${id}, New PM2.5: ${value}`);
+            console.log(`✅ Event [DataSubmitted]! Sensor ID: ${id}, New PM2.5: ${value}`);
             
-            // Gunakan functional update untuk memastikan state selalu yang terbaru
             setSensors(currentSensors =>
                 currentSensors.map(sensor =>
-                    sensor.id === id ? { ...sensor, lastPm25Value: value, lastUpdated: Date.now() / 1000 } : sensor
+                    sensor.id === id ? { ...sensor, lastPm25Value: value, lastUpdated: Math.floor(Date.now() / 1000) } : sensor
                 )
             );
         };
 
         contract.on("DataSubmitted", handleDataSubmitted);
 
-        // Fungsi cleanup: listener akan dihapus saat komponen dibongkar (unmount)
-        // Ini sangat penting untuk mencegah memory leak dan listener duplikat
         return () => {
-            console.log("Removing event listener...");
+            console.log("Removing DataSubmitted event listener...");
             contract.off("DataSubmitted", handleDataSubmitted);
         };
-    }, []); // Dependency array kosong `[]` memastikan efek ini hanya berjalan sekali
+    }, []);
 
     const connectWallet = async () => {
-        if (!providerRef.current) {
-            alert("MetaMask tidak ditemukan. Harap install MetaMask.");
-            return;
-        }
+        if (!providerRef.current) return;
         try {
             const accounts = await providerRef.current.send("eth_requestAccounts", []);
             setAccount(accounts[0]);
@@ -126,6 +132,7 @@ function App() {
         }
     };
     
+    // <<< FUNGSI HANDLE CLICK DIPERBAIKI UNTUK REFETCH DATA >>>
     const handleMapClick = async (e: any) => {
         if (!isRegistering || !providerRef.current || !account) return;
         const { lat, lng } = e.latlng;
@@ -136,14 +143,12 @@ function App() {
             
             alert("Transaksi pendaftaran dikirim... Mohon tunggu konfirmasi.");
             await tx.wait();
-            alert("Sensor berhasil didaftarkan!");
-            // Refresh data setelah berhasil daftar
-            const freshData = await readOnlyContractRef.current!.getAllSensors();
-            const formattedSensors = freshData.map((s: any) => ({
-                 id: Number(s.id), owner: s.owner, latitude: s.latitude, longitude: s.longitude,
-                 lastPm25Value: Number(s.lastPm25Value), lastUpdated: Number(s.lastUpdated)
-            }));
-            setSensors(formattedSensors);
+            alert("Sensor berhasil didaftarkan! Memuat ulang data peta...");
+            
+            // Panggil kembali fetchAllSensors untuk me-refresh data di peta.
+            // Ini cara paling andal untuk menampilkan sensor baru.
+            await fetchAllSensors();
+
         } catch (error) {
             console.error("Gagal mendaftarkan sensor:", error);
             alert("Terjadi kesalahan saat pendaftaran. Cek konsol untuk detail.");
@@ -152,7 +157,6 @@ function App() {
         }
     };
 
-    // ... sisa JSX tidak berubah ...
     return (
         <div className="app-container">
             <header className="header">
@@ -190,7 +194,7 @@ function App() {
                                 <Popup>
                                     <b>Sensor ID: {sensor.id}</b><br/>
                                     PM2.5: {sensor.lastPm25Value}<br/>
-                                    Pemilik: {`${sensor.owner.substring(0, 6)}...`}
+                                    Pemilik: {`${sensor.owner.substring(0, 6)}...${sensor.owner.substring(sensor.owner.length - 4)}`}
                                 </Popup>
                             </Marker>
                         ))}

@@ -10,7 +10,6 @@ contract Auracle is ERC721URIStorage, Ownable {
     using Strings for uint256;
 
     uint256 private _nextTokenId;
-    
     string private _contractBaseURI; 
 
     struct SensorMetadata {
@@ -26,9 +25,10 @@ contract Auracle is ERC721URIStorage, Ownable {
 
     event DataSubmitted(uint256 tokenId, uint256 pm25Value);
     
-    // <<< PERUBAHAN DI SINI: Tambahkan Ownable(msg.sender)
-    constructor() ERC721("Auracle Sensor", "AURA") Ownable(msg.sender) {
-        // Constructor body bisa kosong
+    constructor() ERC721("Auracle Sensor", "AURA") Ownable(msg.sender) {}
+
+    function totalSupply() public view returns (uint256) {
+        return _nextTokenId;
     }
 
     function setBaseURI(string memory newBaseURI) public onlyOwner {

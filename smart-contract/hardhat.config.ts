@@ -1,8 +1,9 @@
 import type { HardhatUserConfig } from "hardhat/config";
-
+import "./tasks/set-base-uri.js";
 import hardhatToolboxViemPlugin from "@nomicfoundation/hardhat-toolbox-viem";
 import { configVariable } from "hardhat/config";
 import "dotenv/config";
+import "@nomicfoundation/hardhat-ethers";
 
 const config: HardhatUserConfig = {
   plugins: [hardhatToolboxViemPlugin],

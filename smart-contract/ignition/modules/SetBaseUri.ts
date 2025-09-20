@@ -1,6 +1,6 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 
-const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+const CONTRACT_ADDRESS = "0x4367d2D2282fa8441649EC9B1c7e4810CBA1606c";
 const BASE_URI = "https://auracle-dapp.vercel.app/api/metadata/";
 
 const SetBaseUriModule = buildModule("SetBaseUriModule", (m) => {

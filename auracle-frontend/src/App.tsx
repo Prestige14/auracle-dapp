@@ -8,13 +8,13 @@ const TARGET_NETWORK = {
     chainId: "0x9b4",
     chainName: "U2U Network Nebulas",
     nativeCurrency: { name: "U2U", symbol: "U2U", decimals: 18 },
-    rpcUrls: ["https://rpc-nebulas-testnet.u2u.xyz/"],
-    wsUrls: ["wss://ws-nebulas-testnet.u2u.xyz/"], // Menggunakan URL WSS Anda yang sudah benar
+    rpcUrls: ["https://rpc-nebulas-testnet.u2u.xyz/"], // HTTP RPC
+    wsUrls: ["wss://ws-nebulas-testnet.u2u.xyz/"],     // WebSocket
     blockExplorerUrls: ["https://testnet.u2uscan.xyz"],
 };
 
 interface Sensor {
-    id: number; // Ini adalah tokenId
+    id: number;
     owner: string;
     latitude: string;
     longitude: string;
@@ -31,22 +31,26 @@ function App() {
     const [account, setAccount] = useState<string | null>(null);
     const [sensors, setSensors] = useState<Sensor[]>([]);
     const [isRegistering, setIsRegistering] = useState<boolean>(false);
-    
-    const providerRef = useRef<ethers.BrowserProvider | null>(null);
-    const readOnlyContractRef = useRef<ethers.Contract | null>(null);
 
-    // <<< FUNGSI FETCH DATA YANG SUDAH DIPERBAIKI >>>
+    // Refs untuk provider
+    const providerRef = useRef<ethers.BrowserProvider | null>(null);
+    const httpProviderRef = useRef<ethers.JsonRpcProvider | null>(null);
+    const wsProviderRef = useRef<ethers.WebSocketProvider | null>(null);
+
+    const readOnlyContractHTTPRef = useRef<ethers.Contract | null>(null);
+    const readOnlyContractWSRef = useRef<ethers.Contract | null>(null);
+
     const fetchAllSensors = async () => {
-        const contract = readOnlyContractRef.current;
+        const contract = readOnlyContractHTTPRef.current;
         if (!contract) return;
-        console.log("Fetching all sensor data using NFT contract logic...");
+
         try {
+            console.log("Fetching all sensor data (HTTP RPC)...");
             const total = await contract.totalSupply();
             const totalSupply = Number(total);
 
             const sensorPromises = [];
             for (let i = 0; i < totalSupply; i++) {
-                // Mengambil data sensor dan pemiliknya secara bersamaan
                 sensorPromises.push(Promise.all([
                     contract.sensorData(i),
                     contract.ownerOf(i)
@@ -54,7 +58,7 @@ function App() {
             }
 
             const results = await Promise.all(sensorPromises);
-            
+
             const formattedSensors = results.map((result, index) => {
                 const [sensorData, owner] = result;
                 return {
@@ -63,27 +67,42 @@ function App() {
                     latitude: sensorData.latitude,
                     longitude: sensorData.longitude,
                     lastPm25Value: Number(sensorData.lastPm25Value),
-                    lastUpdated: Number(sensorData.lastUpdated)
+                    lastUpdated: Number(sensorData.lastUpdated),
                 };
             });
 
             setSensors(formattedSensors);
             console.log(`✅ Successfully fetched ${formattedSensors.length} sensors.`);
         } catch (error) {
-            console.error("Failed to fetch all sensor data:", error);
+            console.error("❌ Failed to fetch all sensor data:", error);
         }
     };
 
-    // useEffect untuk inisialisasi & fetch data awal
     useEffect(() => {
-        const wsProvider = new ethers.WebSocketProvider(TARGET_NETWORK.wsUrls[0]);
-        readOnlyContractRef.current = new ethers.Contract(AURACLE_CONTRACT_ADDRESS, AURACLE_CONTRACT_ABI, wsProvider);
+        // Init provider HTTP + WS
+        httpProviderRef.current = new ethers.JsonRpcProvider(TARGET_NETWORK.rpcUrls[0]);
+        wsProviderRef.current = new ethers.WebSocketProvider(TARGET_NETWORK.wsUrls[0]);
 
-        fetchAllSensors(); // Panggil fungsi fetch yang sudah benar
+        // Contract untuk query data
+        readOnlyContractHTTPRef.current = new ethers.Contract(
+            AURACLE_CONTRACT_ADDRESS,
+            AURACLE_CONTRACT_ABI,
+            httpProviderRef.current
+        );
 
+        // Contract untuk event listener
+        readOnlyContractWSRef.current = new ethers.Contract(
+            AURACLE_CONTRACT_ADDRESS,
+            AURACLE_CONTRACT_ABI,
+            wsProviderRef.current
+        );
+
+        fetchAllSensors();
+
+        // Wallet integration
         if (window.ethereum) {
             providerRef.current = new ethers.BrowserProvider(window.ethereum);
-            
+
             providerRef.current.send("eth_accounts", []).then((accounts) => {
                 if (accounts.length > 0) setAccount(accounts[0]);
             });
@@ -93,20 +112,24 @@ function App() {
             });
             window.ethereum.on('chainChanged', () => window.location.reload());
         }
+
+        return () => {
+            console.log("Cleaning up WS provider...");
+            wsProviderRef.current?.destroy?.(); // penting untuk disconnect WS saat unmount
+        };
     }, []);
 
-    // useEffect terpisah HANYA untuk event 'DataSubmitted'
     useEffect(() => {
-        const contract = readOnlyContractRef.current;
-        if (!contract) return;
+        const contractWS = readOnlyContractWSRef.current;
+        if (!contractWS) return;
 
-        console.log("Setting up event listener for DataSubmitted...");
+        console.log("Setting up event listener (WS) for DataSubmitted...");
 
         const handleDataSubmitted = (sensorId: bigint, pm25Value: bigint) => {
             const id = Number(sensorId);
             const value = Number(pm25Value);
             console.log(`✅ Event [DataSubmitted]! Sensor ID: ${id}, New PM2.5: ${value}`);
-            
+
             setSensors(currentSensors =>
                 currentSensors.map(sensor =>
                     sensor.id === id ? { ...sensor, lastPm25Value: value, lastUpdated: Math.floor(Date.now() / 1000) } : sensor
@@ -114,11 +137,11 @@ function App() {
             );
         };
 
-        contract.on("DataSubmitted", handleDataSubmitted);
+        contractWS.on("DataSubmitted", handleDataSubmitted);
 
         return () => {
-            console.log("Removing DataSubmitted event listener...");
-            contract.off("DataSubmitted", handleDataSubmitted);
+            console.log("Removing DataSubmitted WS listener...");
+            contractWS.off("DataSubmitted", handleDataSubmitted);
         };
     }, []);
 
@@ -131,8 +154,7 @@ function App() {
             console.error("Gagal menghubungkan wallet:", error);
         }
     };
-    
-    // <<< FUNGSI HANDLE CLICK DIPERBAIKI UNTUK REFETCH DATA >>>
+
     const handleMapClick = async (e: any) => {
         if (!isRegistering || !providerRef.current || !account) return;
         const { lat, lng } = e.latlng;
@@ -140,15 +162,12 @@ function App() {
             const signer = await providerRef.current.getSigner();
             const contractWithSigner = new ethers.Contract(AURACLE_CONTRACT_ADDRESS, AURACLE_CONTRACT_ABI, signer);
             const tx = await contractWithSigner.registerSensor(lat.toString(), lng.toString());
-            
+
             alert("Transaksi pendaftaran dikirim... Mohon tunggu konfirmasi.");
             await tx.wait();
             alert("Sensor berhasil didaftarkan! Memuat ulang data peta...");
-            
-            // Panggil kembali fetchAllSensors untuk me-refresh data di peta.
-            // Ini cara paling andal untuk menampilkan sensor baru.
-            await fetchAllSensors();
 
+            await fetchAllSensors();
         } catch (error) {
             console.error("Gagal mendaftarkan sensor:", error);
             alert("Terjadi kesalahan saat pendaftaran. Cek konsol untuk detail.");
@@ -192,8 +211,8 @@ function App() {
                         {sensors.map(sensor => (
                             <Marker key={sensor.id} position={[parseFloat(sensor.latitude), parseFloat(sensor.longitude)]}>
                                 <Popup>
-                                    <b>Sensor ID: {sensor.id}</b><br/>
-                                    PM2.5: {sensor.lastPm25Value}<br/>
+                                    <b>Sensor ID: {sensor.id}</b><br />
+                                    PM2.5: {sensor.lastPm25Value}<br />
                                     Pemilik: {`${sensor.owner.substring(0, 6)}...${sensor.owner.substring(sensor.owner.length - 4)}`}
                                 </Popup>
                             </Marker>

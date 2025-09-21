@@ -2,7 +2,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { ethers } from 'ethers';
-import { AURACLE_CONTRACT_ABI, AURACLE_CONTRACT_ADDRESS } from '../../src/contract/index.ts';
+import { AURACLE_CONTRACT_ABI, AURACLE_CONTRACT_ADDRESS } from '../../src/contract/index.js';
 
 const RPC_URL = "https://rpc-nebulas-testnet.u2u.xyz/";
 

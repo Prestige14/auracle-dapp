@@ -1,43 +1,64 @@
-import hre from "hardhat";
+// scripts/setBaseURI.js
+import { ethers } from "ethers";
+import dotenv from "dotenv";
+import fs from "fs";
 
-const CONTRACT_ADDRESS = "0xEd08fbd0C19cF2e1828C1353137727E8688386a8";
+dotenv.config();
+
+const CONTRACT_ADDRESS = "0x4367d2D2282fa8441649EC9B1c7e4810CBA1606c";
+
+const artifactPath = "./artifacts/contracts/Auracle.sol/Auracle.json";
+
+if (!fs.existsSync(artifactPath)) {
+  console.error(`❌ ABI artifact not found at ${artifactPath}. Run 'npx hardhat compile' first.`);
+  process.exit(1);
+}
+
+const artifact = JSON.parse(fs.readFileSync(artifactPath, "utf8"));
 
 async function main() {
-  console.log("🚀 Start script with viem...");
+  // RPC yang sama seperti di script simulasi
+  const provider = new ethers.JsonRpcProvider("https://rpc-nebulas-testnet.u2u.xyz/");
+  if (!process.env.U2U_PRIVATE_KEY) {
+    console.error("❌ U2U_PRIVATE_KEY belum diset di .env");
+    process.exit(1);
+  }
+  const wallet = new ethers.Wallet(process.env.U2U_PRIVATE_KEY, provider);
+  const contract = new ethers.Contract(CONTRACT_ADDRESS, artifact.abi, wallet);
+
+  console.log(`✅ Connected to contract at ${CONTRACT_ADDRESS}`);
+  console.log(`🔑 Using wallet: ${wallet.address}`);
+
+  // optional: cek owner() agar tidak gagal karena onlyOwner
+  try {
+    const owner = await contract.owner();
+    if (owner && owner.toLowerCase() !== wallet.address.toLowerCase()) {
+      console.error(
+        `❌ Wallet ini bukan owner kontrak. Owner kontrak = ${owner}. Hanya owner yang boleh panggil setBaseURI.`
+      );
+      process.exit(1);
+    }
+  } catch (err) {
+    console.warn("⚠️ Tidak dapat memanggil owner() — lanjutkan (fungsi owner ada di OpenZeppelin Ownable).");
+  }
+
+  const baseURI = "https://auracle-dapp.vercel.app/api/metadata/";
+  console.log("⚙️ Setting baseURI to:", baseURI);
 
   try {
-    // Verify Viem is available
-    if (!hre.viem) {
-      throw new Error("Hardhat-Viem plugin is not initialized. Check your Hardhat config and plugin installation.");
-    }
-
-    // Get wallet client (signer)
-    const walletClients = await hre.viem.getWalletClients();
-    if (!walletClients || walletClients.length === 0) {
-      throw new Error("No wallet clients available. Ensure U2U_PRIVATE_KEY is set in .env.");
-    }
-    const [deployer] = walletClients;
-    console.log("Using deployer:", deployer.account.address);
-
-    // Attach to contract
-    const auracle = await hre.viem.getContractAt("Auracle", CONTRACT_ADDRESS);
-    console.log("Attached to contract:", auracle.address);
-
-    // Set base URI
-    const baseURI = "https://auracle-dapp.vercel.app/api/metadata/";
-    console.log("Setting base URI to:", baseURI);
-
-    const txHash = await auracle.write.setBaseURI(baseURI); // Remove array brackets if setBaseURI expects a single string
-    console.log("Transaction sent:", txHash);
-
-    const receipt = await hre.viem.waitForTransactionReceipt({ hash: txHash });
-    console.log("Transaction mined in block:", receipt.blockNumber);
-
-    console.log("\n✅ Base URI has been set successfully!");
-  } catch (error) {
-    console.error("❌ Error:", error.message);
-    process.exitCode = 1;
+    const tx = await contract.setBaseURI(baseURI);
+    console.log("📤 Tx sent. Hash:", tx.hash ?? tx);
+    const receipt = await tx.wait();
+    console.log("⛓️ Transaction mined in block:", receipt.blockNumber ?? receipt.blockNumber);
+    console.log("✅ Base URI has been set successfully!");
+  } catch (err) {
+    // tampilkan pesan error lengkap agar gampang debug
+    console.error("❌ Error saat memanggil setBaseURI:", err);
+    process.exit(1);
   }
 }
 
-main();
+main().catch((err) => {
+  console.error("❌ Fatal error:", err);
+  process.exit(1);
+});

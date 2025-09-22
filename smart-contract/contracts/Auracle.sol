@@ -106,8 +106,11 @@ contract Auracle is ERC721URIStorage, Ownable {
             }
 
             SensorMetadata memory neighborSensor = sensorData[neighborId];
-
-            if (block.timestamp - neighborSensor.lastUpdated < STALE_DATA_THRESHOLD) {
+            
+            if (
+                block.timestamp - neighborSensor.lastUpdated < STALE_DATA_THRESHOLD &&
+                neighborSensor.lastPm25Value > 0 
+            ) {
                 validNeighbors++;
                 
                 uint diff = _pm25Value > neighborSensor.lastPm25Value
@@ -123,13 +126,13 @@ contract Auracle is ERC721URIStorage, Ownable {
         }
 
         if (validNeighbors > 0) {
-            if (agreements >= disagreements) {
+            if (agreements > disagreements) { 
                 if (sensor.reputationScore <= 100 - REPUTATION_CHANGE) {
                     sensor.reputationScore += REPUTATION_CHANGE;
                 } else {
                     sensor.reputationScore = 100;
                 }
-            } else {
+            } else if (disagreements > agreements) {
                 if (sensor.reputationScore >= REPUTATION_CHANGE) {
                     sensor.reputationScore -= REPUTATION_CHANGE;
                 } else {

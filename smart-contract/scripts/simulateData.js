@@ -4,14 +4,12 @@ import fs from "fs";
 
 dotenv.config();
 
-// <<< PENTING: Ganti dengan ALAMAT KONTRAK BARU Anda setelah deploy ulang
-const CONTRACT_ADDRESS = "0x5b640Ed4C86da0113e649ea86b1bdE01e52ABfe8";
+const CONTRACT_ADDRESS = "0xB5e2350f0467E325dF7353D2AFb7fC8e3C0dF5e9";
 
-// Helper function untuk jeda
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function main() {
-  if (CONTRACT_ADDRESS === "0x5b640Ed4C86da0113e649ea86b1bdE01e52ABfe8") {
+  if (CONTRACT_ADDRESS === "0xALAMAT_KONTRAK_BARU_ANDA") {
     console.error("❌ Kesalahan: Harap ganti 'CONTRACT_ADDRESS' di dalam skrip simulateData.js dengan alamat kontrak Anda yang sudah di-deploy.");
     return;
   }
@@ -49,6 +47,18 @@ async function main() {
 
   console.log(`👍 Ditemukan ${mySensors.length} sensor: [${mySensors.join(', ')}]\n`);
   
+  console.log("\n🔍 Mengecek geohash prefix setiap sensor...");
+
+  for (const sensorId of mySensors) {
+    try {
+      const sensor = await contract.sensorData(sensorId);
+      const geohash = sensor.geohash;
+      const prefix = geohash.substring(0, 5); // ambil 5 karakter pertama (sesuai kontrak)
+      console.log(`   Sensor ID ${sensorId} → Geohash: ${geohash}, Prefix: ${prefix}`);
+    } catch (err) {
+      console.error(`   ❌ Gagal ambil data sensor ${sensorId}:`, err.message);
+    }
+  }
   // --- Logika Simulasi Cerdas ---
   console.log("🚀 Memulai simulasi data cerdas...\n" + "-".repeat(40));
 

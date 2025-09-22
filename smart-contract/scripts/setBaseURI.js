@@ -5,7 +5,7 @@ import fs from "fs";
 
 dotenv.config();
 
-const CONTRACT_ADDRESS = "0x4367d2D2282fa8441649EC9B1c7e4810CBA1606c";
+const CONTRACT_ADDRESS = "0x5b640Ed4C86da0113e649ea86b1bdE01e52ABfe8";
 
 const artifactPath = "./artifacts/contracts/Auracle.sol/Auracle.json";
 

@@ -372,6 +372,11 @@ export const AURACLE_CONTRACT_ABI = [
               "internalType": "uint256",
               "name": "reputationScore",
               "type": "uint256"
+            },
+            {
+              "internalType": "string",
+              "name": "geohash",
+              "type": "string"
             }
           ],
           "internalType": "struct Auracle.SensorMetadata",
@@ -461,6 +466,11 @@ export const AURACLE_CONTRACT_ABI = [
         {
           "internalType": "string",
           "name": "_longitude",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "_geohash",
           "type": "string"
         }
       ],
@@ -571,6 +581,35 @@ export const AURACLE_CONTRACT_ABI = [
         {
           "internalType": "uint256",
           "name": "reputationScore",
+          "type": "uint256"
+        },
+        {
+          "internalType": "string",
+          "name": "geohash",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "name": "sensorsByGeohash",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
           "type": "uint256"
         }
       ],

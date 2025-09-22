@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import ngeohash from 'ngeohash';
 import './App.css';
 import { AURACLE_CONTRACT_ABI, AURACLE_CONTRACT_ADDRESS } from './contract';
 
@@ -158,10 +159,12 @@ function App() {
     const handleMapClick = async (e: any) => {
         if (!isRegistering || !providerRef.current || !account) return;
         const { lat, lng } = e.latlng;
+        const geohash = ngeohash.encode(lat, lng, 9);
+        console.log(`Map clicked at (${lat}, ${lng}). Geohash: ${geohash}`);
         try {
             const signer = await providerRef.current.getSigner();
             const contractWithSigner = new ethers.Contract(AURACLE_CONTRACT_ADDRESS, AURACLE_CONTRACT_ABI, signer);
-            const tx = await contractWithSigner.registerSensor(lat.toString(), lng.toString());
+            const tx = await contractWithSigner.registerSensor(lat.toString(), lng.toString(), geohash);
 
             alert("Transaksi pendaftaran dikirim... Mohon tunggu konfirmasi.");
             await tx.wait();
